@@ -1,5 +1,5 @@
 The reciver for testing is reused from here: https://www.youtube.com/watch?v=fhfw287tRes&t=444s
-List of components:
+List of components for TX circuit:
 1. Button 3x4mm 2 Pins x2
 2. 18650 holder smd x1
 3. Button FP-1825027-8-MFG x3
