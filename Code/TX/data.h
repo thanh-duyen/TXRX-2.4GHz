@@ -4,6 +4,7 @@
 #include "printf.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
+#include <EEPROM.h>
 
 #define MODE_SELECT_PIN 36
 #define JOYS_LEFT_X_PIN 32
@@ -27,6 +28,12 @@ const uint8_t COL_INPUT_PIN[COL_INPUT_NUM] = {26,25,4};
 bool button_status[ROW_OUTPUT_NUM][COL_INPUT_NUM] = {{0,0,0},{0,0,0},{0,0,0},{0,0,0}};
 uint8_t row_output = 0;
 #define TIMES_JUDGEMENT_BUTTON 10
+typedef enum ePage{
+  emHome,
+  emSetting,
+  emSelector
+};
+ePage page = emHome;
 
 #define JOYSTICK_NUM 4
 struct sData{
@@ -53,7 +60,11 @@ bool is_nRF_ok;
 uint16_t read_adc(uint8_t pin, uint8_t times){
   uint16_t average = analogRead(pin);
   for(uint8_t j = 0; j < times; j++){
-    average = (average+analogRead(pin))/2;
+    average = (average+analogRead(pin))/2.0;
   }
   return average;
 }
+uint8_t addnRF_index = 0;
+char addnRF_value[9][11];
+uint16_t cursor_x = 0, cursor_y = 0;
+uint8_t cursor_width = 5;
