@@ -21,3 +21,37 @@ List of components for TX circuit:
 19. TFT SPI 13 Pins 80x160 x1
 20. nRF24l01 + PA + LNA DIG x1
 21. TP4056 x1
+
+List of components for RX circuit:
+1. Capacitor 0603 0.1uF x6
+2. FP-TAJC-MFG 100uF x1
+3. FP-FKD8-MFG 330uF x1
+4. LED 0603 x8
+5. Diode 1N5819HW x1
+6. BUTTON 3x4mm 2 Pin x1
+7. USB Type-C 12 Pins x1
+8. Inductor 100uH x1
+9. Resistor 0603 2K2 x6
+10. Resistor 0603 1K x2
+11. Resistor 0603 1K2 x1
+12. Resistor 0805 180 x1
+13. Resistor 0805 0.33 x1
+14. Resistor 0603 47K x1
+15. Resistor 0603 15K x1
+16. Resistor 0603 10k x1
+17. SPX3819M5-L-3-3 x1
+18. MSS-22D18G2 SWITCH x1
+19. TQFP32 ATmega328-AU x1
+20. MC34063ACD-TR x1
+21. NRF24L01 + PA + LNA SMD x1
+22. TP4056 x1
+23. Crytal 16MHz 3 Pins x1
+24. Led 3mm White x2, Red x2
+List of accessories used for RX circuit:
+1. Ball-bearings 11.5x10x4(thickness)x3(shaft)mm x2
+2. Rubber wheels 18x8x2mm x4
+3. Aluminum tube 3(Outer diameter)x2mm
+4. Steel/zinc bar 1mm
+5. Screw M2, M1.2
+6. Servo SG90 360 degree x1
+7. 1.5g Micro Linear Servo x1
