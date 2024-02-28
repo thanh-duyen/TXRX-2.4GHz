@@ -55,3 +55,5 @@ List of accessories used for RX circuit:
 5. Screw M2, M1.2
 6. Servo SG90 360 degree x1
 7. 1.5g Micro Linear Servo x1
+
+Note for RX Version 1: The PCB that I designed for using boost to 5V, but the current was not enough to operate, so I removed the ic boost and jumped the direct battery to 5V signal.
