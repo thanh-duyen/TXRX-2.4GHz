@@ -42,7 +42,6 @@ struct sData{
     for(uint8_t i = 0; i < ROW_OUTPUT_NUM*COL_INPUT_NUM; i++){
       button[i] = 0;
     }
-    encoder_value = 0;
     encoder_postion = 0;
     mode_sel1 = mode_sel2 = 0;
     is_triggered = false;
@@ -50,7 +49,6 @@ struct sData{
   uint16_t joys_base[JOYSTICK_NUM];
   int16_t joys[JOYSTICK_NUM];
   bool button[ROW_OUTPUT_NUM*COL_INPUT_NUM];
-  int8_t encoder_value;
   int8_t encoder_postion;
   bool mode_sel1, mode_sel2;
   bool is_triggered;
@@ -64,7 +62,22 @@ uint16_t read_adc(uint8_t pin, uint8_t times){
   }
   return average;
 }
-uint8_t addnRF_index = 0;
+uint8_t addnRF_index;
 char addnRF_value[9][11];
-uint16_t cursor_x = 0, cursor_y = 0;
-uint8_t cursor_width = 5;
+uint16_t cursor_x, cursor_y;
+uint8_t cursor_width;
+
+struct sDataSetting{
+  uint8_t base_postion;
+  uint8_t turn_value;
+};
+sDataSetting data_setting;
+
+String add_zero(uint32_t number, uint8_t length){
+  String str = String(number);
+  String buff = "";
+  while(buff.length()+str.length() < length){
+    buff += "0";
+  }
+  return buff + str;
+}

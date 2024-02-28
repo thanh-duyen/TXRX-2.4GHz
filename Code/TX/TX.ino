@@ -32,10 +32,10 @@ void print_info(){
   tft.print("0x"+String(addnRF_value[addnRF_index]));
 }
 void merge_rfdata(sData *data, char *output){
-  /* byte 0  |byte 1  |byte 2  |byte 3  |byte 4                |byte 5  byte 6
-   * 01234567|01234567|01234567|01234567|0123    |4     |567   |012345670123|45  |67
-   * 01234567|89012345|67890123|45678901|0123    |4     |567   |890123456789|01  |23 (7 bytes = 56 bits)
-   * joys_LX |joys_LY |joys_RX |joys_RY |dir_joys|en_dir|en_val|button[0:10]|mode|reserved
+  /* byte 0  |byte 1  |byte 2  |byte 3  |byte 4       byte 5    byte 6
+   * 01234567|01234567|01234567|01234567|0123    |45670 |123456701234|56  |7
+   * 01234567|89012345|67890123|45678901|0123    |45678 |901234567890|12  |3(7 bytes = 56 bits)
+   * joys_LX |joys_LY |joys_RX |joys_RY |dir_joys|en_pos|button[0:10]|mode|reserved
    */
   output[4] = '\0';
   for(uint8_t i = 0; i < JOYSTICK_NUM; i++){
@@ -47,22 +47,25 @@ void merge_rfdata(sData *data, char *output){
     if(data->joys[i] > 0){
       output[4] = (char)output[4] | (1<<i);
     }
+  }  
+  output[4] = (char)output[4] | ((data->encoder_postion >> 1) << 4);
+  output[5] = data->encoder_postion & 0x1;
+  for(uint8_t i = 0; i < 8; i++){
+    if(data->button[i-1] == 1){
+      output[5] = (char)output[5] | (1 << i);
+    }
   }
-  int8_t encoder_dir = data->encoder_value >= 0 ? 1:0;
-  int8_t encoder_value = abs(data->encoder_value);
-  output[4] = (char)output[4] | (encoder_dir << 4) | ((encoder_value & 0x7) << 5);
-  output[5] = '\0';
   output[6] = '\0';
-  for(uint8_t i = 0; i < ROW_OUTPUT_NUM*COL_INPUT_NUM; i++){
-    if(data->button[i] == 1){
-      output[5+i/8] = (char)output[5+i/8] | (1 << i-((i/8)*8));
+  for(uint8_t i = 1; i < 5; i++){
+    if(data->button[i+7] == 1){
+      output[6] = (char)output[6] | (1 << i);
     }
   }
   if(data->mode_sel1 == 1){
-    output[6] = (char)output[6] | (1<<4);
+    output[6] = (char)output[6] | (1<<5);
   }
   if(data->mode_sel2 == 1){
-    output[6] = (char)output[6] | (1<<5);
+    output[6] = (char)output[6] | (1<<6);
   }
   output[7] = '\0';
 }
@@ -90,7 +93,6 @@ void send_rfData(bool is_reset = false){
   merge_rfdata(&rfdata, text);
   if(radio.write(&text, sizeof(text))){
     rfdata.is_triggered = false;
-    rfdata.encoder_value = 0;
     if(times_unsend == 1){
       if(is_connected == false){
         tft.setCursor(0,45);
@@ -123,11 +125,103 @@ void send_rfData(bool is_reset = false){
     }
   }
 }
+bool send_rf(String data, uint8_t times){
+  char text[32] = {NULL};
+  data.toCharArray(text,data.length()+1);
+  while(--times >= 0){
+    if(radio.write(&text, sizeof(text)))
+      return true;
+    delay(1);
+  }
+  return false;
+}
+String trigger_rf(String data, uint8_t times, uint32_t timeout){
+  char text[32] = {NULL};
+  data.toCharArray(text,data.length()+1);
+  bool is_ok = false;
+  while(--times >= 0){
+    if(radio.write(&text, sizeof(text))){
+      is_ok = true;
+      radio.startListening();
+      break;
+    }
+    delay(1);
+  }
+  if(is_ok == true){
+    timeout = millis() + timeout;
+    while(millis() < timeout){
+      if(radio.available()){
+        char text[32] = "";
+        radio.read(&text, sizeof(text));
+        radio.stopListening();
+        return String(text);
+      }
+    }
+  }
+  else
+    return "Err01";
+  radio.stopListening();
+  return "Err02";
+}
 void read_nRF(){
   if(radio.available()){
     char text[32] = "";
     radio.read(&text, sizeof(text));
     Serial.println(text);
+  }
+}
+void print_display(ePage page){
+  if(page == emSetting){
+    cursor_x = 60;
+    cursor_y = 15+0*15+10;
+    cursor_width = 17;
+    String para = trigger_rf("$$$0",5,1000);
+    data_setting.base_postion = para.toInt();
+    para = trigger_rf("$$$1",5,1000);
+    data_setting.turn_value = para.toInt();
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setCursor(0,0);
+    tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+    tft.print("Setting");
+    tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+    tft.setCursor(6,15*1);
+    tft.print("BasePos :" + add_zero(data_setting.base_postion,3));
+    tft.setCursor(6,15*2);
+    tft.print("TurnVal :" + add_zero(data_setting.turn_value,3));
+    tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+    tft.setCursor(0,cursor_y - 10);
+    tft.print(">");
+    tft.drawLine(cursor_x,cursor_y,cursor_x+cursor_width,cursor_y,ST77XX_WHITE);
+    tft.drawLine(cursor_x,cursor_y+1,cursor_x+cursor_width,cursor_y+1,ST77XX_WHITE);
+  }
+  else if(page == emSelector){
+    cursor_x = 18;
+    cursor_y = 15 + addnRF_index*15+10;
+    cursor_width = 5;
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setCursor(0,0);
+    tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+    tft.print("ReciverSelect");
+    tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+    for(uint8_t i = 0; i < 9; i++){
+      tft.setCursor(0,15+i*15);
+      String tmp = "";
+      for(uint8_t j = 0; j < 5; j++){
+        if(EEPROM.read(i*5+1+j) < 0x10) tmp += "0";
+        tmp += String(EEPROM.read(i*5+1+j),HEX);
+      }
+      tmp.toUpperCase();
+      tmp.toCharArray(addnRF_value[i],11);
+      if(addnRF_index == i){
+        tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+        tft.print(">");
+        tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+        tft.print(String(i+1)+":"+tmp);
+      }
+      else tft.print(" "+String(i+1)+":"+tmp);
+    }
+    tft.drawLine(cursor_x,cursor_y,cursor_x+cursor_width,cursor_y,ST77XX_WHITE);
+    tft.drawLine(cursor_x,cursor_y+1,cursor_x+cursor_width,cursor_y+1,ST77XX_WHITE);
   }
 }
 void read_button(){
@@ -145,28 +239,45 @@ void read_button(){
       button_status[row_output][i] = !button_status[row_output][i];
       rfdata.button[row_output*COL_INPUT_NUM+i] = button_status[row_output][i];
       rfdata.is_triggered = true;
-      if(page == emSelector && button_status[row_output][i] == 1){
+      if(page != emHome && button_status[row_output][i] == 1){
         uint8_t button = row_output*COL_INPUT_NUM+i;
         if(button == 1 || button == 3 || button == 4 || button == 5){
-          uint8_t _addnRF_index = addnRF_index;
           uint16_t _cursor_x = cursor_x, _cursor_y = cursor_y;
-          if(button == 1 && addnRF_index > 0){ // U
-            addnRF_index--;
-            cursor_y = 15 + addnRF_index*15+10;
+          if(page == emSelector){
+            uint8_t _addnRF_index = addnRF_index;
+            if(button == 1 && addnRF_index > 0){ // U
+              addnRF_index--;
+              cursor_y = 15 + addnRF_index*15+10;
+            }
+            else if(button == 4 && addnRF_index < 8){ // D
+              addnRF_index++;
+              cursor_y = 15 + addnRF_index*15+10;
+            }
+            else if(button == 3 && cursor_x < 72){ // R
+              cursor_x = cursor_x + 6;
+            }
+            else if(button == 5 && cursor_x > 18){ // L
+              cursor_x = cursor_x - 6;
+            }
+            tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+            tft.setCursor(0,15+_addnRF_index*15); tft.print(" ");
+            tft.setCursor(0,15+addnRF_index*15); tft.print(">");
           }
-          else if(button == 4 && addnRF_index < 8){ // D
-            addnRF_index++;
-            cursor_y = 15 + addnRF_index*15+10;
+          else{
+            uint8_t cur_index = (cursor_y-15-10)/15;
+            uint8_t old_index = cur_index;
+            if(button == 1 && cur_index > 0){ // U
+              cur_index--;
+              cursor_y -= 15;
+            }
+            else if(button == 4 && cur_index < 1){ // D
+              cur_index++;
+              cursor_y += 15;
+            }
+            tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+            tft.setCursor(0,15+old_index*15); tft.print(" ");
+            tft.setCursor(0,15+cur_index*15); tft.print(">");
           }
-          else if(button == 3 && cursor_x < 72){ // R
-            cursor_x = cursor_x + 6;
-          }
-          else if(button == 5 && cursor_x > 18){ // L
-            cursor_x = cursor_x - 6;
-          }
-          tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
-          tft.setCursor(0,15+_addnRF_index*15); tft.print(" ");
-          tft.setCursor(0,15+addnRF_index*15); tft.print(">");
           tft.drawLine(_cursor_x,_cursor_y,_cursor_x+cursor_width,_cursor_y,ST77XX_BLACK);
           tft.drawLine(_cursor_x,_cursor_y+1,_cursor_x+cursor_width,_cursor_y+1,ST77XX_BLACK);
           tft.drawLine(cursor_x,cursor_y,cursor_x+cursor_width,cursor_y,ST77XX_WHITE);
@@ -175,14 +286,45 @@ void read_button(){
         else if(button == 7 || button == 8){
           int8_t value = 1;
           if(button == 8) value = -1; // D2
-          addnRF_value[addnRF_index][(cursor_x-18)/6] = (int)addnRF_value[addnRF_index][(cursor_x-18)/6] + value;
-          if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '@') addnRF_value[addnRF_index][(cursor_x-18)/6] = '9';
-          else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '/') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'F';
-          else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == ':') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'A';
-          else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == 'G') addnRF_value[addnRF_index][(cursor_x-18)/6] = '0';
-          addnRF_value[addnRF_index][10] = '\0';
-          tft.setCursor(0,15+addnRF_index*15);
-          tft.print(">"+String(addnRF_index+1)+":"+String(addnRF_value[addnRF_index]));
+          if(page == emSelector){
+            addnRF_value[addnRF_index][(cursor_x-18)/6] = (int)addnRF_value[addnRF_index][(cursor_x-18)/6] + value;
+            if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '@') addnRF_value[addnRF_index][(cursor_x-18)/6] = '9';
+            else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '/') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'F';
+            else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == ':') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'A';
+            else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == 'G') addnRF_value[addnRF_index][(cursor_x-18)/6] = '0';
+            addnRF_value[addnRF_index][10] = '\0';
+            tft.setCursor(0,15+addnRF_index*15);
+            tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+            tft.print(">");
+            tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+            tft.print(String(addnRF_index+1)+":"+String(addnRF_value[addnRF_index]));
+          }
+          else{
+            if(cursor_y == 1*15+10){
+              data_setting.base_postion += value;
+              tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+              tft.setCursor(6,15*1);
+              tft.print("BasePos :" + add_zero(data_setting.base_postion,3));
+              send_rf("###0" + String(data_setting.base_postion),10);
+            }
+            else if(cursor_y == 2*15+10){
+              data_setting.turn_value += value;
+              tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+              tft.setCursor(6,15*2);
+              tft.print("TurnVal :" + add_zero(data_setting.turn_value,3));
+              send_rf("###1" + String(data_setting.turn_value),10);
+            }
+          }
+        }
+        else if(button == 9){
+          if(page == emSetting){
+            page = emSelector;
+            print_display(page);
+          }
+          else{
+            page = emSetting;
+            print_display(page);
+          }
         }
       }
     }
@@ -218,29 +360,9 @@ void read_switch(){
       //Serial.println(String(rfdata.mode_sel1)+String(rfdata.mode_sel2));
       if(rfdata.mode_sel1 == 0 && rfdata.mode_sel2 == 1 && page == emHome){
         page = emSelector;
-        cursor_x = 18;
-        cursor_y = 15 + addnRF_index*15+10;
-        tft.fillScreen(ST77XX_BLACK);
-        tft.setCursor(0,0);
-        tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
-        tft.print("ReciverSelect");
-        tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
-        for(uint8_t i = 0; i < 9; i++){
-          tft.setCursor(0,15+i*15);
-          String tmp = "";
-          for(uint8_t j = 0; j < 5; j++){
-            if(EEPROM.read(i*5+1+j) < 0x10) tmp += "0";
-            tmp += String(EEPROM.read(i*5+1+j),HEX);
-          }
-          tmp.toUpperCase();
-          tmp.toCharArray(addnRF_value[i],11);
-          if(addnRF_index == i) tft.print(">"+String(i+1)+":"+tmp);
-          else tft.print(" "+String(i+1)+":"+tmp);
-        }
-        tft.drawLine(cursor_x,cursor_y,cursor_x+cursor_width,cursor_y,ST77XX_WHITE);
-        tft.drawLine(cursor_x,cursor_y+1,cursor_x+cursor_width,cursor_y+1,ST77XX_WHITE);
+        print_display(page);
       }
-      else if(rfdata.mode_sel1 == 0 && rfdata.mode_sel2 == 0 && page == emSelector){
+      else if(rfdata.mode_sel1 == 0 && rfdata.mode_sel2 == 0 && page != emHome){
         char temp[3] = "\0\0";
         for(uint8_t a = 0; a < 9; a++){
           for(uint8_t i = 0, k = 0; i < 10 && k < 5; i++, k++){
@@ -259,7 +381,6 @@ void read_switch(){
         radio.openWritingPipe(address);
         radio.openReadingPipe(1, address);
         //radio.printDetails();
-        rfdata.encoder_value = 0;
         page = emHome;
         tft.fillScreen(ST77XX_BLACK);
         print_info();
@@ -282,37 +403,55 @@ void read_encoder(){
   if(currentState != lastState){
     int8_t value = 0;
     if(currentState == 0b00 && lastState == 0b10){
-      if(abs(rfdata.encoder_value) < 8){
-        rfdata.encoder_value--;
+      if(page == emHome){
         rfdata.encoder_postion--;
         if(rfdata.encoder_postion < 0){
-          rfdata.encoder_postion += 19;
+          rfdata.encoder_postion = 19;
         }
-        rfdata.is_triggered = true;
       }
       value--;
     }
     else if(currentState == 0b10 && lastState == 0b00){
-      if(abs(rfdata.encoder_value) < 8){
-        rfdata.encoder_value++;
+      if(page == emHome){
         rfdata.encoder_postion++;
         if(rfdata.encoder_postion >= 20){
-          rfdata.encoder_postion -= 20;
+          rfdata.encoder_postion = 0;
         }
-        rfdata.is_triggered = true;
       }
       value++;
     }
-    if(value != 0 && page == emSelector){
-      addnRF_value[addnRF_index][(cursor_x-18)/6] = (int)addnRF_value[addnRF_index][(cursor_x-18)/6] + value;
-      if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '@') addnRF_value[addnRF_index][(cursor_x-18)/6] = '9';
-      else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '/') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'F';
-      else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == ':') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'A';
-      else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == 'G') addnRF_value[addnRF_index][(cursor_x-18)/6] = '0';
-      addnRF_value[addnRF_index][10] = '\0';
-      tft.setCursor(0,15+addnRF_index*15);
-      tft.print(">"+String(addnRF_index+1)+":"+String(addnRF_value[addnRF_index]));
+    if(value != 0){
+      if(page == emSelector){
+        addnRF_value[addnRF_index][(cursor_x-18)/6] = (int)addnRF_value[addnRF_index][(cursor_x-18)/6] + value;
+        if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '@') addnRF_value[addnRF_index][(cursor_x-18)/6] = '9';
+        else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == '/') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'F';
+        else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == ':') addnRF_value[addnRF_index][(cursor_x-18)/6] = 'A';
+        else if(addnRF_value[addnRF_index][(cursor_x-18)/6] == 'G') addnRF_value[addnRF_index][(cursor_x-18)/6] = '0';
+        addnRF_value[addnRF_index][10] = '\0';
+        tft.setCursor(0,15+addnRF_index*15);
+        tft.setTextColor(ST77XX_WHITE,ST77XX_BLACK);
+        tft.print(">");
+        tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+        tft.print(String(addnRF_index+1)+":"+String(addnRF_value[addnRF_index]));
+      }
+      else if(page == emSetting){
+        if(cursor_y == 1*15+10){
+          data_setting.base_postion += value;
+          tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+          tft.setCursor(6,15*1);
+          tft.print("BasePos :" + add_zero(data_setting.base_postion,3));
+          send_rf("###0" + String(data_setting.base_postion),10);
+        }
+        else if(cursor_y == 2*15+10){
+          data_setting.turn_value += value;
+          tft.setTextColor(ST77XX_RED,ST77XX_BLACK);
+          tft.setCursor(6,15*2);
+          tft.print("TurnVal :" + add_zero(data_setting.turn_value,3));
+          send_rf("###1" + String(data_setting.turn_value),10);
+        }
+      }
     }
+    
     lastState = currentState;
   }
 }
