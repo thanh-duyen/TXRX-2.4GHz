@@ -22,7 +22,7 @@ List of components for TX circuit:
 20. nRF24l01 + PA + LNA DIG x1
 21. TP4056 x1
 
-List of components for RX circuit:
+List of components for RX circuit version 1:
 1. Capacitor 0603 0.1uF x6
 2. FP-TAJC-MFG 100uF x1
 3. FP-FKD8-MFG 330uF x1
@@ -57,3 +57,5 @@ List of accessories used for RX circuit:
 7. 1.5g Micro Linear Servo x1
 
 Note for RX Version 1: The PCB that I designed for using boost to 5V, but the current was not enough to operate, so I removed the ic boost and jumped the direct battery to 5V signal.
+
+For RX version 3, you can get all source here: https://www.pcbway.com/project/shareproject/2_4GHz_receiver_circuit_using_ESP32_nRF24L01_with_IC_motor_controller_L298N_dc1f96e2.html
